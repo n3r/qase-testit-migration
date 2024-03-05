@@ -1,0 +1,12 @@
+{
+    "qase": {
+        "api_token": "<QASE_API_TOKEN>",
+        "host": "<QASE_API_HOST|Default:qase.io>",
+        "ssl": true,
+        "enterprise": false
+    },
+    "testit": {
+        "host": "<TESTIT_HOST>",
+        "token": "<TESTIT_TOKEN>",
+    }
+}
