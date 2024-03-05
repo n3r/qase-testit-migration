@@ -4,6 +4,7 @@ from testit_api_client.api_client import ApiClient
 from testit_api_client.api import projects_api
 from testit_api_client.api import project_sections_api
 from testit_api_client.api import project_work_items_api
+from testit_api_client.api import work_items_api
 
 
 class TestItService:
@@ -39,4 +40,12 @@ class TestItService:
         try:
             return api_instance.get_work_items_by_project_id(str(project_id), skip=offset, take=limit, include_iterations=True)
         except testit_api_client.ApiException as e:
-            print("Exception when calling ProjectSectionsApi->get_cases_by_project_id: %s\n" % e)
+            print("Exception when calling get_work_items_by_project_id: %s\n" % e)
+
+    def get_case(self, id):
+        api_instance = work_items_api.WorkItemsApi(self.client)
+
+        try:
+            return api_instance.get_work_item_by_id(id)
+        except testit_api_client.ApiException as e:
+            print("Exception when calling get_work_item_by_id: %s\n" % e)

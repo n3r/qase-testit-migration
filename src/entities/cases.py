@@ -9,7 +9,7 @@ from .attachments import Attachments
 from typing import List, Optional, Union
 
 from urllib.parse import quote
-from datetime import datetime
+import html2text
 
 
 class Cases:
@@ -31,8 +31,10 @@ class Cases:
         self.attachments = Attachments(self.qase, self.testit, self.logger, self.mappings, self.config, self.pools)
         self.total = 0
         self.logger.divider()
+        self.steps_index = {}
 
         self.project = None
+        self.h = html2text.HTML2Text()
 
     def import_cases(self, project: dict):
         return asyncio.run(self.import_cases_async(project))
@@ -68,7 +70,6 @@ class Cases:
                 self.logger.print_status('['+self.project['code']+'] Importing test cases', self.total, self.total, 1)
             return len(cases)
         except Exception as e:
-            self.logger.log(f"[{self.project['code']}][Tests] Error processing cases: {e}", 'error')
             return 0
 
     async def _prepare_cases(self, cases: List) -> List:
@@ -80,33 +81,37 @@ class Cases:
         return result
 
     async def _prepare_case(self, case, result):
-        if case['entity_type_name'] == 'TestCases':
-            data = {
-                'title': case['name'],
-                'created_at': str(case['created_date'].strftime("%Y-%m-%d %H:%M:%S")),
-                'updated_at': str(case['modified_date'].strftime("%Y-%m-%d %H:%M:%S")),
-                'author_id': self.mappings.get_user_id(case['created_by_id']),
-                'steps': [],
-                'attachments': [],
-                'is_flaky': 0,
-                'custom_field': {},
-            }
+        try: 
+            if case['entity_type_name'] == 'TestCases':
+                case = self.testit.get_case(str(case['global_id']))
+                data = {
+                    'title': case['name'],
+                    'created_at': str(case['created_date'].strftime("%Y-%m-%d %H:%M:%S")),
+                    'updated_at': str(case['modified_date'].strftime("%Y-%m-%d %H:%M:%S")),
+                    'author_id': self.mappings.get_user_id(case['created_by_id']),
+                    'steps': [],
+                    'attachments': [],
+                    'is_flaky': 0,
+                    'custom_field': {},
+                }
 
-            # import custom fields
-            #data = self._import_custom_fields_for_case(case=case, data=data)
-            #data = await self._get_attachments_for_case(case=case, data=data)
 
-            #data = self._set_priority(case=case, data=data)
-            #data = self._set_type(case=case, data=data)
-            data = self._set_suite(case=case, data=data)
-            #data = self._set_refs(case=case, data=data)
-            #data = self._set_milestone(case=case, data=data, code=self.project['code'])
+                # import custom fields
+                #data = self._import_custom_fields_for_case(case=case, data=data)
 
-            result.append(
-                TestCasebulkCasesInner(
-                    **data
+                #data = self._set_priority(case=case, data=data)
+                #data = self._set_type(case=case, data=data)
+                data = self._set_suite(case=case, data=data)
+                #data = self._set_milestone(case=case, data=data, code=self.project['code'])
+                data = self._import_all_steps(case=case, data=data)
+
+                result.append(
+                    TestCasebulkCasesInner(
+                        **data
+                    )
                 )
-            )
+        except Exception as e:
+            self.logger.log(f"[{self.project['code']}][Tests] Error preparing case {case['name']}: {e}", 'error')
     # Done
     def _set_refs(self, case:dict, data: dict):
         if self.mappings.refs_id and case['refs'] and self.config.get('tests.refs.enable'):
@@ -158,30 +163,33 @@ class Cases:
                             data['custom_field'][str(custom_field['qase_id'])] = ','.join(str(int(v)+1) for v in value)
                 else:
                     data['custom_field'][str(custom_field['qase_id'])] = str(self.attachments.check_and_replace_attachments(case[field_name], self.project['code']))
-            if field_name[len('custom_'):] in self.mappings.step_fields and case[field_name]:
-                steps = []
-                i = 1
-                for step in case[field_name]:
-                    action = self.attachments.check_and_replace_attachments(step['content'], self.project['code'])
-                    expected = self.attachments.check_and_replace_attachments(step['expected'], self.project['code'])
-
-                    action = action.strip()
-                    expected = expected.strip()
-
-                    if (action != '' or (action == '' and expected != '')):
-                        if action == '' or action == ' ':
-                            action = 'No action'
-                        steps.append(
-                            TestStepCreate(
-                                action=action,
-                                expected_result=expected,
-                                position=i
-                            )
-                        )
-                        i += 1
-                    else:
-                        self.logger.log(f'[{self.project["code"]}][Tests] Case {case["title"]} has invalid step {step}', 'warning')
-                data['steps'] = steps
+        return data
+    
+    def _import_all_steps(self, case: dict, data: dict) -> dict:
+        self.steps_index[case['id']] = 0
+        for type in ['section_precondition_steps', 'precondition_steps', 'steps', 'postcondition_steps', 'section_postcondition_steps']:
+            if type in case and case[type] and len(case[type]) > 0:
+                data = self._import_steps(case['id'], case[type], data)
+        return data
+    
+    def _import_steps(self, id, steps: list, data: dict) -> dict:
+        try:
+            for step in steps:
+                if step['work_item'] != None and step['work_item']['steps'] != None and len(step['work_item']['steps']) > 0:
+                    data = self._import_steps(id, step['work_item']['steps'], data)
+                else:
+                    if step['action'] != '':
+                        expected = self.h.handle(step['expected'].strip()) if step['expected'] != None else ''
+                        test_data = self.h.handle(step['test_data'].strip()) if step['test_data'] != None else ''
+                        self.steps_index[id] += 1
+                        data['steps'].append(TestStepCreate(
+                            action = self.h.handle(step['action'].strip()),
+                            expected_result = expected,
+                            data = test_data,
+                            position=self.steps_index[id]
+                        ))
+        except Exception as e:
+            self.logger.log(f'[{self.project["code"]}][Tests] Failed to import steps for case {id}: {e}', 'error')
         return data
     
     # Done. Method validates if custom field value exists (skip)

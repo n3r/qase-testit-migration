@@ -7,6 +7,6 @@
     },
     "testit": {
         "host": "<TESTIT_HOST>",
-        "token": "<TESTIT_TOKEN>",
+        "token": "<TESTIT_TOKEN>"
     }
 }
