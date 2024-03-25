@@ -5,6 +5,7 @@ from testit_api_client.api import projects_api
 from testit_api_client.api import project_sections_api
 from testit_api_client.api import project_work_items_api
 from testit_api_client.api import work_items_api
+from testit_api_client.api import attachments_api
 
 
 class TestItService:

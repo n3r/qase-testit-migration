@@ -178,12 +178,13 @@ class Cases:
                 if step['work_item'] != None and step['work_item']['steps'] != None and len(step['work_item']['steps']) > 0:
                     data = self._import_steps(id, step['work_item']['steps'], data)
                 else:
-                    if step['action'] != '':
+                    action = (self.h.handle(step['action'])).strip()
+                    if action != '':
                         expected = self.h.handle(step['expected'].strip()) if step['expected'] != None else ''
                         test_data = self.h.handle(step['test_data'].strip()) if step['test_data'] != None else ''
                         self.steps_index[id] += 1
                         data['steps'].append(TestStepCreate(
-                            action = self.h.handle(step['action'].strip()),
+                            action = action,
                             expected_result = expected,
                             data = test_data,
                             position=self.steps_index[id]
