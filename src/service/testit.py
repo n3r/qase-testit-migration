@@ -16,6 +16,7 @@ class TestItService:
 
         configuration = testit_api_client.Configuration()
         configuration.host = self.config.get('testit.host')
+        configuration.verify_ssl = False
 
         self.client = ApiClient(configuration=configuration, header_name='Authorization', header_value=f"PrivateToken {self.config.get('testit.token')}")
         
